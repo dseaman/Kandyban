@@ -3,6 +3,11 @@ import type KansidianPlugin from "../main";
 import type { ParsedItem } from "../parser";
 import { captureFocus, restoreFocus } from "./preserve-focus";
 import { modeBadge, renderModePlaceholder, shouldShowPlaceholder } from "./mode-placeholder";
+import { compareItems, type SortState } from "./list-sort";
+
+// Cards default-sort by horizon within each column: now → … → someday in the
+// configured vocabulary, with missing horizons last (see compareItems).
+const HORIZON_SORT: SortState = { column: "horizon", direction: "asc" };
 
 const FOCUSABLE_SELECTORS = [".kansidian-board-search"];
 
@@ -83,7 +88,7 @@ export class KansidianBoardView extends ItemView {
 			}
 
 			const entries = this.plugin.index.entries();
-			const filtered = this.applyFilters(entries);
+			const filtered = this.sortByHorizon(this.applyFilters(entries));
 
 			const header = root.createDiv({ cls: "kansidian-board-header" });
 			header.createEl("h2", { text: `Kandyban board (${filtered.length} of ${entries.length}) · ${modeBadge(mode)}` });
@@ -146,6 +151,15 @@ export class KansidianBoardView extends ItemView {
 				{ duration: FLIP_DURATION_MS, easing: "ease", fill: "none" },
 			);
 		});
+	}
+
+	// Stable sort: equal-horizon cards keep their incoming (index) order.
+	private sortByHorizon(entries: Entry[]): Entry[] {
+		const vocab = {
+			status: this.plugin.settings.statusEnums,
+			horizon: this.plugin.settings.horizonEnums,
+		};
+		return [...entries].sort(([, a], [, b]) => compareItems(a, b, HORIZON_SORT, vocab));
 	}
 
 	private applyFilters(entries: Entry[]): Entry[] {

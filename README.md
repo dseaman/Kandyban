@@ -42,7 +42,7 @@ SweetClaude in Claude Code remains the primary working interface — Kandyban is
 - **Cycle commands.** `Cycle status forward` and `Cycle horizon forward` rotate through your configured enum vocabularies for the active file — useful with hotkeys.
 - **Configurable enum vocabularies.** Status and horizon rotation sets are settings — set your own if your project uses non-default values.
 - **Dual convention support.** Reads both the framework-standard `I-*` (current SweetClaude) and the legacy `BL-*` convention some projects use. Recognizes `**Horizon:**` and `**Priority:**` as the same field. Milestone values like `MS-002-browser-extension-mvp` canonicalize to `MS-002`.
-- **Ribbon icon.** One-click access to the board from Obsidian's left ribbon.
+- **Ribbon icons.** One-click access from Obsidian's left ribbon: a kanban-square icon opens the board, a checklist icon opens the list.
 
 ## Compatibility
 
@@ -99,14 +99,15 @@ After installing and enabling Kandyban:
 2. The board renders columns by status (`open`, `in-progress`, `done` by default), with one card per work item.
 3. **Drag a card** to a different column to change its status. The underlying `.md` file is updated immediately; annotations are preserved.
 4. **Click a card** to open the underlying file in a new pane.
-5. Open the list view (command palette → "Kandyban: Open list") for a tabular layout with inline enum editing.
+5. Open the list view — click the **checklist icon** in the left ribbon, or use the command palette → "Kandyban: Open list" — for a tabular layout with inline enum editing.
 
 ## Usage reference
 
 ### Board view
 
 - **Columns:** one per status value in your configured vocabulary (`open` / `in-progress` / `done` by default). Any extra status values present in your data appear as additional columns at the right so nothing is hidden.
-- **Cards:** show `id` (monospace), `title`, `milestone` badge (if set), and a `horizon` chip (if set).
+- **A card's column is its `**Status:**` field — nothing else.** Kandyban reflects what's written in the file; it does not infer progress. If a coding agent (or anyone) starts work on a ticket without writing an in-progress status into its metadata, the card stays in whichever column its `**Status:**` says — it will *not* move on its own. To show it as in-progress, drag the card to that column (which writes the status back to the file), or have the agent set `**Status:**` itself. Note that in project-root layout, external edits to `.sweetclaude/*` files don't reach Obsidian until you run **`Rescan vault and show cache hint`** (see [Vault setup](#vault-setup)).
+- **Cards:** show `id` (monospace), `title`, `milestone` badge (if set), and a `horizon` chip (if set). Within a column, cards are ordered by `horizon` (your configured order, e.g. `now → … → someday`), with no-horizon cards last.
 - **Drag to move:** native HTML5 drag and drop. Drop targets highlight on hover. After drop, the card animates from old to new position; the destination card flashes the accent color for ~900ms so the eye lands at the change.
 - **Click a card** to open the underlying file in a new tab.
 - **Scope:** the board surfaces only items with `kind: backlog` (i.e. `I-*` and `BL-*`). Milestone files (`MS-*`) are not rendered as cards — they're link targets.

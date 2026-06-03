@@ -78,6 +78,9 @@ export default class KansidianPlugin extends Plugin {
 		this.addRibbonIcon("kanban-square", "Kandyban board", () => {
 			void this.activateView(KANSIDIAN_BOARD_VIEW_TYPE);
 		});
+		this.addRibbonIcon("list-checks", "Kandyban list", () => {
+			void this.activateView(KANSIDIAN_LIST_VIEW_TYPE);
+		});
 
 		this.registerView(
 			KANSIDIAN_BOARD_VIEW_TYPE,
