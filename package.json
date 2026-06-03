@@ -1,6 +1,6 @@
 {
 	"name": "kandyban",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Obsidian plugin: non-destructive Kanban view over markdown backlog and milestones.",
 	"main": "main.js",
 	"type": "module",

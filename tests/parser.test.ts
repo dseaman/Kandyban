@@ -49,6 +49,30 @@ describe("parseSweetClaudeFile — structure", () => {
 		expect(item!.enums.status).toBe("active");
 	});
 
+	it("reads bold-key fields from a second header block separated by a blank line", () => {
+		// SweetClaude's issue template emits the core fields, then a blank line,
+		// then **Milestone:**/**Sequence:**. The parser must not stop at the blank.
+		const item = parseSweetClaudeFile(fixture("I-200-split-header-block.md"));
+		expect(item).not.toBeNull();
+		expect(item!.id).toBe("I-200");
+		expect(item!.enums.status).toBe("done");
+		expect(item!.raw["milestone"]).toBe("MS-001-foundation");
+		expect(item!.enums.milestone).toBe("MS-001");
+		expect(item!.raw["sequence"]).toBe("1");
+	});
+
+	it("reads **Milestone:** that sits below a multi-line prose narrative in the header", () => {
+		// Real issues interleave prose (Evidence/Update paragraphs with embedded
+		// bold markdown) between the core fields and **Milestone:**. The header
+		// region ends at the first `##` section heading, not the first prose line.
+		const item = parseSweetClaudeFile(fixture("I-201-prose-interleaved-header.md"));
+		expect(item).not.toBeNull();
+		expect(item!.id).toBe("I-201");
+		expect(item!.enums.status).toBe("backlog");
+		expect(item!.raw["milestone"]).toBe("MS-007 (MVP Launch Readiness)");
+		expect(item!.enums.milestone).toBe("MS-007");
+	});
+
 	it("returns null for a file with no bold-key block", () => {
 		expect(parseSweetClaudeFile(fixture("garbage-no-bold-keys.md"))).toBeNull();
 	});

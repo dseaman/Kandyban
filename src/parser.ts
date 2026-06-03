@@ -18,7 +18,12 @@ export interface ParsedItem {
 }
 
 const H1_RE = /^# ([A-Z]+-\d+): (.+?)\s*$/;
-const BOLD_KEY_RE = /^\*\*([A-Za-z][A-Za-z 0-9]*):\*\*\s*(.*?)\s*$/;
+// Keys may contain spaces ("Roadmap Item"), digits, underscores
+// ("mode_introduced"), and hyphens. keyToField normalises all of these.
+const BOLD_KEY_RE = /^\*\*([A-Za-z][A-Za-z 0-9_-]*):\*\*\s*(.*?)\s*$/;
+// A Markdown section heading (`## Description`, `## Outcome`, …) terminates the
+// header region. The H1 is consumed separately, before scanning starts.
+const HEADING_RE = /^#{1,6}\s/;
 const MILESTONE_PREFIX = "MS";
 
 function keyToField(rawKey: string): string {
@@ -82,18 +87,22 @@ export function parseSweetClaudeFile(content: string): ParsedItem | null {
 	}
 	if (h1Index === -1) return null;
 
-	// Skip whitespace-only lines immediately after the H1, then collect the
-	// contiguous bold-key block.
-	let i = h1Index + 1;
-	while (i < lines.length && (lines[i] ?? "").trim() === "") i++;
-
+	// Collect bold-key fields from the header region. SweetClaude's issue
+	// template scatters fields across multiple blocks and interleaves them with
+	// multi-line prose (Evidence/Update paragraphs that themselves contain bold
+	// markdown), with **Milestone:** often sitting below that prose. So we scan
+	// the whole region up to the first `##`-style section heading, collecting
+	// every bold-key line and ignoring prose, rather than stopping at the first
+	// non-field line. First-wins, so a prose line that mimics a field can't
+	// clobber the real value above it.
 	const raw: Record<string, string> = {};
-	for (; i < lines.length; i++) {
+	for (let i = h1Index + 1; i < lines.length; i++) {
 		const line = lines[i] ?? "";
+		if (HEADING_RE.test(line)) break;
 		const m = line.match(BOLD_KEY_RE);
-		if (!m) break;
+		if (!m) continue;
 		const field = keyToField(m[1]!);
-		raw[field] = m[2]!;
+		if (raw[field] === undefined) raw[field] = m[2]!;
 	}
 
 	if (Object.keys(raw).length === 0) return null;

@@ -106,7 +106,11 @@ export class KansidianListView extends ItemView {
 			}
 			toolbarRendered = true;
 
-			const entries = this.plugin.index.entries();
+			// Milestone files (MS-*) are entities items belong to, not work items
+			// themselves — surface only backlog items as rows, matching the board.
+			const entries = this.plugin.index
+				.entries()
+				.filter(([, item]) => item.kind === "backlog");
 			const filtered = this.applyFilters(entries);
 			const sorted = this.applySort(filtered);
 
