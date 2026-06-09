@@ -158,3 +158,47 @@ describe("round-trip parse → readback", () => {
 		}
 	});
 });
+
+describe("parseSweetClaudeFile — SC4 frontmatter", () => {
+  it("parses an issue with id in frontmatter", () => {
+    const item = parseSweetClaudeFile(
+      fixture("ISSUE-001-teams-roles-crud.md"),
+      "product/backlog/ISSUE-001-teams-roles-crud.md",
+    )!;
+    expect(item.id).toBe("ISSUE-001");
+    expect(item.kind).toBe("backlog");
+    expect(item.title).toBe("Teams & roles CRUD");
+    expect(item.enums.status).toBe("active");
+    expect(item.enums.horizon).toBe("p0");
+    expect(item.enums.milestone).toBe("EP-001");
+    expect(item.enums.effort).toBe("m");
+    expect(item.enums.dependsOn).toEqual([]);
+  });
+
+  it("derives id from the filename when frontmatter has no id", () => {
+    const item = parseSweetClaudeFile(
+      fixture("STORY-007-filename-only-id.md"),
+      "product/backlog/stories/STORY-007-filename-only-id.md",
+    )!;
+    expect(item.id).toBe("STORY-007");
+    expect(item.kind).toBe("backlog");
+    expect(item.title).toBe("Example story");
+    expect(item.enums.status).toBe("backlog");
+  });
+
+  it("classifies an epic as a grouping entity (kind=milestone)", () => {
+    const item = parseSweetClaudeFile(
+      fixture("EP-001-team-capacity-foundation.md"),
+      "product/roadmap/epics/EP-001-team-capacity-foundation.md",
+    )!;
+    expect(item.id).toBe("EP-001");
+    expect(item.kind).toBe("milestone");
+    expect(item.enums.status).toBe("new");
+    expect(item.enums.dependsOn).toEqual([]);
+  });
+
+  it("returns null when frontmatter has no usable id (no id field, unparseable filename)", () => {
+    const item = parseSweetClaudeFile("---\ntitle: X\nstatus: new\n---\n", "notes/scratch.md");
+    expect(item).toBeNull();
+  });
+});

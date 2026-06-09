@@ -1,6 +1,9 @@
 // Pure parser for SweetClaude bold-key markdown artifacts (BL-*, I-*, MS-*).
 // No `obsidian` imports. Strings in, structured object out.
 
+import { detectFormat } from "./format";
+import { extractFrontmatter, readScalars, readArray } from "./frontmatter";
+
 export type ItemKind = "backlog" | "milestone";
 
 export interface ParsedItem {
@@ -68,7 +71,7 @@ export function parseDependsOn(value: string): string[] {
 		.filter((s) => s.length > 0 && s !== "(none)");
 }
 
-export function parseSweetClaudeFile(content: string): ParsedItem | null {
+function parseBoldKey(content: string): ParsedItem | null {
 	const lines = content.split(/\r?\n/);
 
 	// Find the H1.
@@ -125,4 +128,46 @@ export function parseSweetClaudeFile(content: string): ParsedItem | null {
 	if (raw["depends_on"] !== undefined) enums.dependsOn = parseDependsOn(raw["depends_on"]);
 
 	return { id, kind, title, raw, enums };
+}
+
+function idFromPath(logicalPath: string): string {
+	const base = logicalPath.split("/").pop() ?? "";
+	const m = base.match(/^([A-Z]+-\d+)/);
+	return m ? m[1]! : "";
+}
+
+function parseFrontmatterItem(fm: string, logicalPath: string): ParsedItem | null {
+	const scalars = readScalars(fm);
+
+	const id = scalars["id"] || idFromPath(logicalPath);
+	if (!id) return null;
+
+	const title = scalars["title"] ?? "";
+	const type = (scalars["type"] ?? "").toLowerCase();
+	const isEntity = type === "epic" || type === "milestone" || /^(EP|MS)-/.test(id);
+	const kind: ItemKind = isEntity ? "milestone" : "backlog";
+
+	const enums: ParsedItem["enums"] = { dependsOn: [] };
+	if (scalars["status"] !== undefined) enums.status = normaliseStatus(scalars["status"]);
+	if (scalars["priority"] !== undefined) enums.horizon = normaliseHorizon(scalars["priority"]);
+	if (scalars["epic"] !== undefined && scalars["epic"].length > 0) {
+		enums.milestone = canonicaliseMilestone(scalars["epic"]);
+	}
+	if (scalars["effort"] !== undefined && scalars["effort"].length > 0) {
+		enums.effort = extractEnum(scalars["effort"]).toLowerCase();
+	}
+	enums.dependsOn = readArray(fm, "depends_on");
+
+	return { id, kind, title, raw: scalars, enums };
+}
+
+export function parseSweetClaudeFile(content: string, logicalPath = ""): ParsedItem | null {
+	const format = detectFormat(content);
+	if (format === "sc4") {
+		const fm = extractFrontmatter(content);
+		if (fm === null) return null;
+		return parseFrontmatterItem(fm, logicalPath);
+	}
+	if (format === "sc3") return parseBoldKey(content);
+	return null;
 }
