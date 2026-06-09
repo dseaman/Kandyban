@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Trim the plugin description to fit Obsidian's 250-character limit so installs and updates no longer error.
+
 ## 0.5.0
 
 - Kandyban now reads SweetClaude 4.x projects, where each item's details live in a YAML block at the top of the file (issues, stories, and epics). Your board and list fill in just like they always have — no settings to change.
