@@ -41,3 +41,46 @@ export function updateBoldKeyEnum(
 	const newLine = prefix + newValue;
 	return content.replace(lineRe, newLine);
 }
+
+function stripQuotes(value: string): string {
+	const v = value.trim();
+	if (v.length >= 2 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) {
+		return v.slice(1, -1);
+	}
+	return v;
+}
+
+// Splice the leading scalar of a top-level `field:` line inside the first
+// frontmatter block, preserving everything else byte-identically: the closing
+// fence, the body, nested maps, line endings, and any trailing `# comment`.
+export function updateFrontmatterEnum(
+	content: string,
+	field: string,
+	newEnum: string,
+): string {
+	const block = content.match(/^---\r?\n[\s\S]*?\r?\n---/);
+	if (!block) return content;
+	const fullBlock = block[0];
+
+	// Column-0 key only (the `m` flag's `^` matches line starts; the key is not
+	// preceded by whitespace, so indented nested keys never match). Group 1 is
+	// `field: ` + leading spaces; group 2 is the scalar; group 3 is an optional
+	// trailing comment to preserve.
+	const lineRe = new RegExp(
+		`^(${escapeRegex(field)}:[ \\t]*)([^\\r\\n#]*?)([ \\t]*#[^\\r\\n]*)?$`,
+		"m",
+	);
+	const m = fullBlock.match(lineRe);
+	if (!m) return content;
+
+	const prefix = m[1]!;
+	const currentValue = m[2]!;
+	const comment = m[3] ?? "";
+	if (stripQuotes(currentValue) === newEnum) return content;
+
+	// The block is anchored at index 0 by the `^---` match, so the file is exactly
+	// `fullBlock + remainder`. Splice the one line inside the block and reattach the
+	// untouched remainder — byte-identical except the replaced scalar.
+	const newBlock = fullBlock.replace(lineRe, prefix + newEnum + comment);
+	return newBlock + content.slice(fullBlock.length);
+}
