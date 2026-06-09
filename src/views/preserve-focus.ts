@@ -49,7 +49,7 @@ function hasSelectionRange(
 	el: Element,
 ): el is HTMLInputElement | HTMLTextAreaElement {
 	return (
-		(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+		(el.instanceOf(HTMLInputElement) || el.instanceOf(HTMLTextAreaElement)) &&
 		typeof el.setSelectionRange === "function"
 	);
 }

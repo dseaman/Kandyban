@@ -147,7 +147,7 @@ export class KansidianListView extends ItemView {
 
 		if (toolbarRendered && preserved) {
 			const wrapper = root.querySelector(`.kansidian-list-filter-${preserved.key}`);
-			if (wrapper instanceof HTMLElement) {
+			if (wrapper && wrapper.instanceOf(HTMLElement)) {
 				this.toggleFilterPopover(wrapper, preserved.key, preserved.options);
 			}
 		}
@@ -318,8 +318,8 @@ export class KansidianListView extends ItemView {
 		const onKeyDown = (event: KeyboardEvent): void => {
 			if (event.key === "Escape") this.closeOpenPopover();
 		};
-		document.addEventListener("mousedown", onDocumentClick);
-		document.addEventListener("keydown", onKeyDown);
+		activeDocument.addEventListener("mousedown", onDocumentClick);
+		activeDocument.addEventListener("keydown", onKeyDown);
 
 		this.openPopover = {
 			wrapper: anchor,
@@ -327,8 +327,8 @@ export class KansidianListView extends ItemView {
 			key,
 			options,
 			cleanup: () => {
-				document.removeEventListener("mousedown", onDocumentClick);
-				document.removeEventListener("keydown", onKeyDown);
+				activeDocument.removeEventListener("mousedown", onDocumentClick);
+				activeDocument.removeEventListener("keydown", onKeyDown);
 			},
 		};
 	}

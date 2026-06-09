@@ -8,6 +8,11 @@ export default tseslint.config(
 		languageOptions: {
 			globals: {
 				...globals.browser,
+				// Obsidian augments the global scope with these popout-window-aware
+				// accessors (obsidian.d.ts). Declare them so no-undef recognises the
+				// activeDocument/activeWindow usages preferred over document/window.
+				activeDocument: "readonly",
+				activeWindow: "readonly",
 			},
 			parserOptions: {
 				projectService: {

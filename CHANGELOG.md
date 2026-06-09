@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- Better behaviour when an Obsidian window is popped out: the board and list now use the active window's document and cross-window-safe type checks, so popovers and inline edits work correctly in detached windows.
+
 ## 0.5.1
 
 - Trim the plugin description to fit Obsidian's 250-character limit so installs and updates no longer error.
