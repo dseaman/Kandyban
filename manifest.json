@@ -2,7 +2,7 @@
 	"id": "kandyban",
 	"name": "Kandyban",
 	"version": "0.5.2",
-	"minAppVersion": "1.5.0",
+	"minAppVersion": "1.7.2",
 	"description": "Non-destructive Kanban view over markdown-based project backlog and milestones. Reads bold-key and YAML metadata directly, lets you drag cards between status columns, edit enums inline, and writes changes back without touching the rest of the file.",
 	"author": "Dan Seaman",
 	"authorUrl": "https://github.com/dseaman",
