@@ -202,3 +202,14 @@ describe("parseSweetClaudeFile — SC4 frontmatter", () => {
     expect(item).toBeNull();
   });
 });
+
+describe("SC4 epics are grouping entities, not cards", () => {
+  it("an epic parses with kind=milestone so views exclude it from card columns", () => {
+    const epic = parseSweetClaudeFile(
+      fixture("EP-001-team-capacity-foundation.md"),
+      "product/roadmap/epics/EP-001-team-capacity-foundation.md",
+    )!;
+    // board-view applyFilters and list-view both gate on kind === "backlog".
+    expect(epic.kind).toBe("milestone");
+  });
+});
