@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- Require Obsidian 1.7.2 or newer, matching the workspace APIs Kandyban already uses to open its views reliably.
+
 ## 0.5.2
 
 - Better behaviour when an Obsidian window is popped out: the board and list now use the active window's document and cross-window-safe type checks, so popovers and inline edits work correctly in detached windows.
