@@ -127,7 +127,7 @@ export class ItemIndex {
 			}
 			return;
 		}
-		const parsed = parseSweetClaudeFile(content);
+		const parsed = parseSweetClaudeFile(content, logicalPath);
 
 		if (!parsed) {
 			if (opts.previous) {
