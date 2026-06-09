@@ -12,7 +12,8 @@ import {
 	KansidianSettingTab,
 } from "./settings";
 import { ItemIndex } from "./item-index";
-import { updateBoldKeyEnum } from "./writer";
+import { updateBoldKeyEnum, updateFrontmatterEnum } from "./writer";
+import { detectFormat } from "./format";
 import {
 	detectMode,
 	type FileAccess,
@@ -317,7 +318,10 @@ export default class KansidianPlugin extends Plugin {
 
 	async applyEnumChange(logicalPath: string, field: string, newEnum: string): Promise<void> {
 		const content = await this.access.read(logicalPath);
-		const next = updateBoldKeyEnum(content, field, newEnum);
+		const next =
+			detectFormat(content) === "sc4"
+				? updateFrontmatterEnum(content, field.toLowerCase() === "horizon" ? "priority" : field.toLowerCase(), newEnum)
+				: updateBoldKeyEnum(content, field, newEnum);
 		if (next === content) return;
 		await this.access.write(logicalPath, next);
 		// In project-root mode without a hidden-files plugin, vault events won't
