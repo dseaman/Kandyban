@@ -8,6 +8,7 @@ export interface KansidianSettings {
 	backlogPath: string;
 	issuesPath: string;
 	milestonesPath: string;
+	roadmapPath: string;
 
 	// Enum vocabularies for the "cycle forward" commands. Comma-separated in
 	// the UI, normalised to string[] in memory. First entry is the default
@@ -20,14 +21,15 @@ export const DEFAULT_SETTINGS: KansidianSettings = {
 	backlogPath: "product/backlog",
 	issuesPath: "product/issues",
 	milestonesPath: "product/milestones",
+	roadmapPath: "product/roadmap",
 	statusEnums: ["open", "in-progress", "done"],
 	horizonEnums: ["now", "next", "sooner", "soon", "later", "someday"],
 };
 
 const SCAN_PATH_KEYS: ReadonlyArray<keyof Pick<
 	KansidianSettings,
-	"backlogPath" | "issuesPath" | "milestonesPath"
->> = ["backlogPath", "issuesPath", "milestonesPath"];
+	"backlogPath" | "issuesPath" | "milestonesPath" | "roadmapPath"
+>> = ["backlogPath", "issuesPath", "milestonesPath", "roadmapPath"];
 
 function parseCsvEnum(raw: string, fallback: string[]): string[] {
 	const parsed = raw
@@ -110,6 +112,19 @@ export class KansidianSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.milestonesPath)
 					.onChange(async (value) => {
 						this.plugin.settings.milestonesPath = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Roadmap path")
+			.setDesc("Scanned for SweetClaude 4.x roadmap entities such as epics (under roadmap/epics/). Leave blank to disable.")
+			.addText((text) =>
+				text
+					.setPlaceholder(DEFAULT_SETTINGS.roadmapPath)
+					.setValue(this.plugin.settings.roadmapPath)
+					.onChange(async (value) => {
+						this.plugin.settings.roadmapPath = value.trim();
 						await this.plugin.saveSettings();
 					}),
 			);
