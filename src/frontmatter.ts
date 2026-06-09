@@ -19,6 +19,14 @@ function stripQuotes(value: string): string {
 	return v;
 }
 
+// Strips a trailing YAML inline comment. Per YAML, a `#` only opens a comment
+// when preceded by whitespace; a `#` inside a value (e.g. "C# impl") is not a
+// comment. Quoted scalars are left untouched so a `#` inside quotes survives.
+function stripInlineComment(value: string): string {
+	if (value.trim().startsWith('"') || value.trim().startsWith("'")) return value;
+	return value.replace(/\s+#.*$/, "");
+}
+
 // Top-level `key: value` scalars only (column 0, no leading whitespace). First
 // occurrence wins. Indented lines (nested map/sequence members) are skipped.
 export function readScalars(fm: string): Record<string, string> {
@@ -28,7 +36,7 @@ export function readScalars(fm: string): Record<string, string> {
 		if (!m) continue;
 		const key = m[1]!.toLowerCase();
 		if (out[key] !== undefined) continue;
-		out[key] = stripQuotes(m[2]!);
+		out[key] = stripQuotes(stripInlineComment(m[2]!));
 	}
 	return out;
 }

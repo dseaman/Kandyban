@@ -175,4 +175,18 @@ completion_criteria:
     const src = "# I-001: Title\n**Status:** done";
     expect(updateFrontmatterEnum(src, "status", "x")).toBe(src);
   });
+
+  it("does not expand $-sequences in a preserved trailing comment", () => {
+    const src = "---\nstatus: active # see $1 and $& and $`\n---\n";
+    const out = updateFrontmatterEnum(src, "status", "done");
+    expect(out).toBe("---\nstatus: done # see $1 and $& and $`\n---\n");
+  });
+});
+
+describe("updateBoldKeyEnum — $-sequence safety", () => {
+  it("does not expand $-sequences in a preserved annotation", () => {
+    const src = "# I-001: Title\n**Status:** active ($1.2M budget, $& review)";
+    const out = updateBoldKeyEnum(src, "Status", "done");
+    expect(out).toBe("# I-001: Title\n**Status:** done ($1.2M budget, $& review)");
+  });
 });

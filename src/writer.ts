@@ -39,7 +39,9 @@ export function updateBoldKeyEnum(
 
 	const newValue = newEnum + annotation;
 	const newLine = prefix + newValue;
-	return content.replace(lineRe, newLine);
+	// Function-form replacement: returning a literal avoids `$1`/`$&` expansion
+	// when the preserved annotation contains a dollar sign (e.g. "($1.2M budget)").
+	return content.replace(lineRe, () => newLine);
 }
 
 function stripQuotes(value: string): string {
@@ -81,6 +83,8 @@ export function updateFrontmatterEnum(
 	// The block is anchored at index 0 by the `^---` match, so the file is exactly
 	// `fullBlock + remainder`. Splice the one line inside the block and reattach the
 	// untouched remainder — byte-identical except the replaced scalar.
-	const newBlock = fullBlock.replace(lineRe, prefix + newEnum + comment);
+	// Function-form replacement: returning a literal avoids `$1`/`$&` expansion
+	// when the preserved trailing comment contains a dollar sign (e.g. "# see $1").
+	const newBlock = fullBlock.replace(lineRe, () => prefix + newEnum + comment);
 	return newBlock + content.slice(fullBlock.length);
 }

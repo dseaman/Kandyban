@@ -60,6 +60,19 @@ describe("readScalars", () => {
     expect(s["done"]).toBeUndefined();
     expect(s["cc-1"]).toBeUndefined();
   });
+
+  it("strips a trailing inline comment", () => {
+    expect(readScalars("status: active # current")["status"]).toBe("active");
+    expect(readScalars("priority: P0   # high")["priority"]).toBe("P0");
+  });
+
+  it("does not treat a '#' that lacks preceding whitespace as a comment", () => {
+    expect(readScalars("lang: C#")["lang"]).toBe("C#");
+  });
+
+  it("keeps a '#' inside a quoted value", () => {
+    expect(readScalars('title: "C# implementation"')["title"]).toBe("C# implementation");
+  });
 });
 
 describe("readArray", () => {
