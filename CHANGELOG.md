@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Items without a status now appear in a "no status" column on the board instead of disappearing.
+- The board's item count no longer includes milestones and epics.
+- If a change can't be saved (for example, the file has no Status field), Kandyban now tells you instead of silently doing nothing.
+- Fields written in lowercase (like `**status:**`) can now be edited from the board and list, not just displayed.
+- Filters list horizons and statuses in your configured order.
+- Clicking an item that's already open jumps to its tab; Cmd/Ctrl-click and middle-click open new tabs or splits as elsewhere in Obsidian.
+- New refresh button in the board and list headers to pick up changes made outside Obsidian. The rescan command is now called "Rescan project" and also detects a newly created project.
+
 ## 0.5.3
 
 - Require Obsidian 1.7.2 or newer, matching the workspace APIs Kandyban already uses to open its views reliably.
