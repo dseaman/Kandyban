@@ -3,6 +3,7 @@ import type KansidianPlugin from "../main";
 import type { ParsedItem } from "../parser";
 import { captureFocus, restoreFocus } from "./preserve-focus";
 import { modeBadge, renderModePlaceholder, shouldShowPlaceholder } from "./mode-placeholder";
+import { MultiSelectFilters } from "./multi-select-filter";
 import { compareItems, sortedOptions, type SortState, type SortVocabulary } from "./list-sort";
 
 // Cards default-sort by horizon within each column: now → … → someday in the
@@ -43,6 +44,11 @@ export class KansidianBoardView extends ItemView {
 	private readonly plugin: KansidianPlugin;
 	private unsubscribe?: () => void;
 	private filters: BoardFilters = { search: "", horizon: "", milestone: "" };
+	// Status is multi-select so columns can be hidden (e.g. everything but "done").
+	private readonly statusFilter = new MultiSelectFilters<"status">(
+		() => this.render(),
+		(value) => (value === NO_STATUS_COLUMN ? NO_STATUS_LABEL : value),
+	);
 	private recentlyMovedPath: string | null = null;
 	private recentlyMovedAt = 0;
 
@@ -71,12 +77,14 @@ export class KansidianBoardView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.unsubscribe?.();
+		this.statusFilter.closePopover();
 	}
 
 	private render(): void {
 		const root = this.containerEl.children[1];
 		if (!root) return;
 
+		this.statusFilter.beginRender();
 		const focusSnapshot = captureFocus(this.containerEl, FOCUSABLE_SELECTORS);
 
 		// Capture pre-render state for FLIP and scroll preservation.
@@ -107,7 +115,9 @@ export class KansidianBoardView extends ItemView {
 			this.renderToolbar(root.createDiv({ cls: "kansidian-board-toolbar" }), entries);
 
 			const columnsContainer = root.createDiv({ cls: "kansidian-board-columns" });
-			const columnNames = this.deriveColumns(filtered.map(([, i]) => i));
+			const columnNames = this.deriveColumns(filtered.map(([, i]) => i)).filter((c) =>
+				this.statusFilter.matches("status", c),
+			);
 
 			for (const columnName of columnNames) {
 				this.renderColumn(columnsContainer, columnName, filtered);
@@ -131,6 +141,7 @@ export class KansidianBoardView extends ItemView {
 		} finally {
 			restoreFocus(this.containerEl, focusSnapshot);
 		}
+		this.statusFilter.endRender();
 	}
 
 	private snapshotCardRects(root: Element): Map<string, DOMRect> {
@@ -181,6 +192,7 @@ export class KansidianBoardView extends ItemView {
 		const { search, horizon, milestone } = this.filters;
 		const needle = search.trim().toLowerCase();
 		return entries.filter(([, item]) => {
+			if (!this.statusFilter.matches("status", item.enums.status ?? NO_STATUS_COLUMN)) return false;
 			if (horizon && item.enums.horizon !== horizon) return false;
 			if (milestone && item.enums.milestone !== milestone) return false;
 			if (needle) {
@@ -240,6 +252,9 @@ export class KansidianBoardView extends ItemView {
 		});
 
 		const items = entries.map(([, item]) => item);
+		// Status options mirror the board's columns (configured statuses, any
+		// extras found in files, and "no status" when relevant).
+		this.statusFilter.renderButton(toolbar, "status", this.deriveColumns(items));
 		const vocab = this.vocab();
 		const uniqueHorizons = sortedOptions(items.map((i) => i.enums.horizon), "horizon", vocab);
 		const uniqueMilestones = sortedOptions(items.map((i) => i.enums.milestone), "milestone", vocab);

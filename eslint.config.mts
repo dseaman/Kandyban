@@ -47,5 +47,7 @@ export default tseslint.config(
 		"version-bump.mjs",
 		"versions.json",
 		"main.js",
+		// Present when the repo is opened as an Obsidian vault for testing.
+		".obsidian",
 	]),
 );
