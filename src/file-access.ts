@@ -4,6 +4,7 @@
 // must use vault.adapter because the Obsidian indexer skips dotdirs).
 
 import { TFile, type Vault } from "obsidian";
+import { matchesAnyRoot } from "./paths";
 
 export interface FileAccess {
 	// Resolve a logical Kansidian-relative path (e.g. "product/backlog/BL-001.md")
@@ -129,16 +130,6 @@ export class ProjectRootAccess implements FileAccess {
 		const p = `${ProjectRootAccess.PREFIX}/`;
 		return vaultPath.startsWith(p) ? vaultPath.slice(p.length) : vaultPath;
 	}
-}
-
-function matchesAnyRoot(path: string, roots: string[]): boolean {
-	const normalised = path.replace(/^\/+/, "");
-	for (const r of roots) {
-		const root = r.replace(/\/+$/, "");
-		if (root.length === 0) continue;
-		if (normalised === root || normalised.startsWith(`${root}/`)) return true;
-	}
-	return false;
 }
 
 // Detect which mode the vault is in by looking for SweetClaude's state file.

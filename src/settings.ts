@@ -132,7 +132,7 @@ export class KansidianSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Status enum vocabulary")
 			.setDesc(
-				"Comma-separated values the cycle-status command rotates through. Default: open, in-progress, done.",
+				"Comma-separated, in order. Sets the board columns, the choices when editing a status inline, sort order, and what the cycle-status command rotates through. Default: open, in-progress, done.",
 			)
 			.addTextArea((area) =>
 				area
@@ -150,7 +150,7 @@ export class KansidianSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Horizon enum vocabulary")
 			.setDesc(
-				"Comma-separated values the cycle-horizon command rotates through. Default: now, next, sooner, soon, later, someday.",
+				"Comma-separated, soonest first. Sets how cards and filters are ordered, the choices when editing a horizon inline, and what the cycle-horizon command rotates through. Default: now, next, sooner, soon, later, someday.",
 			)
 			.addTextArea((area) =>
 				area

@@ -1,9 +1,9 @@
 import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
-import type KansidianPlugin from "../main";
+import type { EnumKind, default as KansidianPlugin } from "../main";
 import type { ParsedItem } from "../parser";
 import { captureFocus, restoreFocus } from "./preserve-focus";
 import { modeBadge, renderModePlaceholder, shouldShowPlaceholder } from "./mode-placeholder";
-import { compareItems, type SortColumn, type SortState } from "./list-sort";
+import { compareItems, sortedOptions, type SortColumn, type SortState, type SortVocabulary } from "./list-sort";
 
 const FOCUSABLE_SELECTORS = [".kansidian-list-search"];
 
@@ -19,8 +19,6 @@ interface ListFilters {
 	horizon: Set<string> | null;
 	milestone: Set<string> | null;
 }
-
-type EnumField = "Status" | "Horizon" | "Priority";
 
 type Entry = [string, ParsedItem]; // [logicalPath, item]
 
@@ -77,6 +75,7 @@ export class KansidianListView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		this.addAction("refresh-cw", "Rescan project", () => void this.plugin.rescan());
 		this.unsubscribe = this.plugin.index.subscribe(() => this.render());
 		this.render();
 	}
@@ -153,12 +152,16 @@ export class KansidianListView extends ItemView {
 		}
 	}
 
-	private applySort(entries: Entry[]): Entry[] {
-		if (!this.sort) return entries;
-		const vocab = {
+	private vocab(): SortVocabulary {
+		return {
 			status: this.plugin.settings.statusEnums,
 			horizon: this.plugin.settings.horizonEnums,
 		};
+	}
+
+	private applySort(entries: Entry[]): Entry[] {
+		if (!this.sort) return entries;
+		const vocab = this.vocab();
 		const sort = this.sort;
 		return [...entries].sort(([, a], [, b]) => compareItems(a, b, sort, vocab));
 	}
@@ -241,9 +244,10 @@ export class KansidianListView extends ItemView {
 		});
 
 		const items = entries.map(([, item]) => item);
-		const uniqueStatuses = sortedUnique(items.map((i) => i.enums.status));
-		const uniqueHorizons = sortedUnique(items.map((i) => i.enums.horizon));
-		const uniqueMilestones = sortedUnique(items.map((i) => i.enums.milestone));
+		const vocab = this.vocab();
+		const uniqueStatuses = sortedOptions(items.map((i) => i.enums.status), "status", vocab);
+		const uniqueHorizons = sortedOptions(items.map((i) => i.enums.horizon), "horizon", vocab);
+		const uniqueMilestones = sortedOptions(items.map((i) => i.enums.milestone), "milestone", vocab);
 
 		this.renderMultiSelectFilter(toolbar, "status", uniqueStatuses);
 		this.renderMultiSelectFilter(toolbar, "horizon", uniqueHorizons);
@@ -360,24 +364,31 @@ export class KansidianListView extends ItemView {
 		row.createEl("td", { text: item.enums.milestone ?? "", cls: "kansidian-list-milestone" });
 		row.createEl("td", { text: item.raw["scope"] ?? "", cls: "kansidian-list-scope" });
 
-		this.renderEnumCell(statusCell, logicalPath, item, "status", this.plugin.settings.statusEnums);
-		this.renderEnumCell(horizonCell, logicalPath, item, "horizon", this.plugin.settings.horizonEnums);
+		this.renderEnumCell(statusCell, logicalPath, "status", item.enums.status ?? "", this.plugin.settings.statusEnums);
+		this.renderEnumCell(horizonCell, logicalPath, "horizon", item.enums.horizon ?? "", this.plugin.settings.horizonEnums);
 
-		const openFile = (): void => {
-			void this.plugin.openLogical(logicalPath);
+		const openFile = (event: MouseEvent): void => {
+			void this.plugin.openLogical(logicalPath, event);
 		};
-		idCell.addEventListener("click", openFile);
-		titleCell.addEventListener("click", openFile);
+		// Middle-click opens in a new tab, as elsewhere in Obsidian.
+		const openOnMiddleClick = (event: MouseEvent): void => {
+			if (event.button !== 1) return;
+			event.preventDefault();
+			openFile(event);
+		};
+		for (const cell of [idCell, titleCell]) {
+			cell.addEventListener("click", openFile);
+			cell.addEventListener("auxclick", openOnMiddleClick);
+		}
 	}
 
 	private renderEnumCell(
 		cell: HTMLElement,
 		logicalPath: string,
-		item: ParsedItem,
-		which: "status" | "horizon",
+		which: EnumKind,
+		current: string,
 		vocabulary: string[],
 	): void {
-		const current = item.enums[which] ?? "";
 		cell.empty();
 		cell.setText(current);
 
@@ -385,22 +396,21 @@ export class KansidianListView extends ItemView {
 
 		cell.addEventListener("click", (event) => {
 			event.stopPropagation();
-			this.openEnumMenu(event, logicalPath, item, which, vocabulary, current);
+			this.openEnumMenu(event, logicalPath, which, vocabulary, current);
 		});
 	}
 
 	private openEnumMenu(
 		event: MouseEvent,
 		logicalPath: string,
-		item: ParsedItem,
-		which: "status" | "horizon",
+		which: EnumKind,
 		vocabulary: string[],
 		current: string,
 	): void {
 		const menu = new Menu();
 		// Show the current value first if it isn't in the configured vocabulary,
 		// so the user can see what the file actually has.
-		const choices = vocabulary.includes(current) ? vocabulary : [current, ...vocabulary];
+		const choices = !current || vocabulary.includes(current) ? vocabulary : [current, ...vocabulary];
 
 		for (const opt of choices) {
 			menu.addItem((menuItem) => {
@@ -408,25 +418,11 @@ export class KansidianListView extends ItemView {
 				if (opt === current) menuItem.setIcon("checkmark");
 				menuItem.onClick(() => {
 					if (opt === current) return;
-					const field: EnumField =
-						which === "status"
-							? "Status"
-							: item.raw["horizon"] !== undefined
-								? "Horizon"
-								: "Priority";
-					void this.plugin.applyEnumChange(logicalPath, field, opt);
+					void this.plugin.applyEnumChange(logicalPath, which, opt);
 				});
 			});
 		}
 
 		menu.showAtMouseEvent(event);
 	}
-}
-
-function sortedUnique(values: Array<string | undefined>): string[] {
-	const set = new Set<string>();
-	for (const v of values) {
-		if (typeof v === "string" && v.length > 0) set.add(v);
-	}
-	return Array.from(set).sort();
 }

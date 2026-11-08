@@ -6,6 +6,7 @@
 
 import { parseSweetClaudeFile, type ParsedItem } from "./parser";
 import type { FileAccess } from "./file-access";
+import { matchesAnyRoot } from "./paths";
 
 export type IndexChange =
 	| { kind: "added"; id: string }
@@ -22,8 +23,11 @@ export interface ItemIndexOptions {
 export class ItemIndex {
 	private readonly items = new Map<string, ParsedItem>(); // key: logical path
 	private readonly listeners = new Set<IndexListener>();
-	private readonly access: FileAccess;
+	private access: FileAccess;
 	private scanPaths: string[];
+	// Bumped on every rebuild; a rebuild that finishes after a newer one started
+	// discards its results instead of clobbering the fresher index.
+	private generation = 0;
 
 	constructor(access: FileAccess, options: ItemIndexOptions) {
 		this.access = access;
@@ -34,11 +38,24 @@ export class ItemIndex {
 		this.scanPaths = paths;
 	}
 
+	setAccess(access: FileAccess): void {
+		this.access = access;
+	}
+
+	size(): number {
+		return this.items.size;
+	}
+
 	async rebuild(): Promise<void> {
-		this.items.clear();
+		const generation = ++this.generation;
 		const paths = await this.access.listMarkdownUnder(this.scanPaths);
-		for (const p of paths) {
-			await this.indexPath(p, { silent: true });
+		const parsed = await Promise.all(
+			paths.map(async (p) => [p, await this.readAndParse(p)] as const),
+		);
+		if (generation !== this.generation) return;
+		this.items.clear();
+		for (const [p, item] of parsed) {
+			if (item) this.items.set(p, item);
 		}
 		this.emit({ kind: "noop" });
 	}
@@ -75,13 +92,12 @@ export class ItemIndex {
 	// Vault-event handlers. Caller already filtered for tracked paths.
 	async onPathModified(logicalPath: string): Promise<void> {
 		if (!this.tracks(logicalPath)) return;
-		const previous = this.items.get(logicalPath);
-		await this.indexPath(logicalPath, { silent: false, previous });
+		await this.indexPath(logicalPath);
 	}
 
 	async onPathCreated(logicalPath: string): Promise<void> {
 		if (!this.tracks(logicalPath)) return;
-		await this.indexPath(logicalPath, { silent: false });
+		await this.indexPath(logicalPath);
 	}
 
 	onPathDeleted(logicalPath: string): void {
@@ -98,53 +114,42 @@ export class ItemIndex {
 			this.emit({ kind: "removed", id: existing.id });
 		}
 		if (!this.tracks(newLogicalPath)) return;
-		await this.indexPath(newLogicalPath, { silent: false });
+		await this.indexPath(newLogicalPath);
 	}
 
 	private tracks(logicalPath: string): boolean {
 		if (!logicalPath.toLowerCase().endsWith(".md")) return false;
-		const normalised = logicalPath.replace(/^\/+/, "");
-		for (const r of this.scanPaths) {
-			const root = r.replace(/\/+$/, "");
-			if (!root) continue;
-			if (normalised === root || normalised.startsWith(`${root}/`)) return true;
-		}
-		return false;
+		return matchesAnyRoot(logicalPath, this.scanPaths);
 	}
 
-	private async indexPath(
-		logicalPath: string,
-		opts: { silent: boolean; previous?: ParsedItem },
-	): Promise<void> {
+	// Returns null when the file can't be read (e.g. deleted between list and
+	// read) or isn't a recognisable SweetClaude item.
+	private async readAndParse(logicalPath: string): Promise<ParsedItem | null> {
 		let content: string;
 		try {
 			content = await this.access.read(logicalPath);
 		} catch {
-			// File may have just been deleted between list and read.
-			if (opts.previous) {
-				this.items.delete(logicalPath);
-				if (!opts.silent) this.emit({ kind: "removed", id: opts.previous.id });
-			}
-			return;
+			return null;
 		}
-		const parsed = parseSweetClaudeFile(content, logicalPath);
+		return parseSweetClaudeFile(content, logicalPath);
+	}
+
+	private async indexPath(logicalPath: string): Promise<void> {
+		const previous = this.items.get(logicalPath);
+		const parsed = await this.readAndParse(logicalPath);
 
 		if (!parsed) {
-			if (opts.previous) {
+			if (previous) {
 				this.items.delete(logicalPath);
-				if (!opts.silent) this.emit({ kind: "removed", id: opts.previous.id });
+				this.emit({ kind: "removed", id: previous.id });
 			}
 			return;
 		}
 
 		this.items.set(logicalPath, parsed);
-		if (opts.silent) return;
-
-		if (!opts.previous) {
+		if (!previous) {
 			this.emit({ kind: "added", id: parsed.id });
-			return;
-		}
-		if (enumsEqual(opts.previous, parsed)) {
+		} else if (enumsEqual(previous, parsed)) {
 			this.emit({ kind: "noop" });
 		} else {
 			this.emit({ kind: "changed", id: parsed.id });
@@ -162,6 +167,7 @@ function enumsEqual(a: ParsedItem, b: ParsedItem): boolean {
 	if (ae.status !== be.status) return false;
 	if (ae.horizon !== be.horizon) return false;
 	if (ae.milestone !== be.milestone) return false;
+	if (ae.effort !== be.effort) return false;
 	if (ae.dependsOn.length !== be.dependsOn.length) return false;
 	for (let i = 0; i < ae.dependsOn.length; i++) {
 		if (ae.dependsOn[i] !== be.dependsOn[i]) return false;
