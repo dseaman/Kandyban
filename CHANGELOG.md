@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0
+
+- The board now has a status filter. Untick statuses to hide their columns — for example, hide "done" to focus on what's left.
+
 ## 0.6.0
 
 - Items without a status now appear in a "no status" column on the board instead of disappearing.
