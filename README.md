@@ -89,7 +89,7 @@ To pick the hidden `.sweetclaude/` folder in the vault picker:
 
 ### Which layout is Kandyban using right now?
 
-The view headers show your detected layout — e.g. `Kandyban board (134 of 134) · kanban`. Kandyban's `Rescan vault and show cache hint` command also surfaces the current mode in its Notice.
+The view headers show your detected layout — e.g. `Kandyban board (134 of 134) · kanban`. To pick up changes made outside Obsidian, use the **refresh button** in the board or list header, or the `Kandyban: Rescan project` command — it also re-detects the vault layout and project mode.
 
 ## Quick start
 
@@ -98,7 +98,7 @@ After installing and enabling Kandyban:
 1. Click the **kanban-square icon** in Obsidian's left ribbon (or open the command palette with `⌘+P` and search for "Kandyban: Open board").
 2. The board renders columns by status (`open`, `in-progress`, `done` by default), with one card per work item.
 3. **Drag a card** to a different column to change its status. The underlying `.md` file is updated immediately; annotations are preserved.
-4. **Click a card** to open the underlying file in a new pane.
+4. **Click a card** to open the underlying file in a new tab (or jump to its tab if it's already open).
 5. Open the list view — click the **checklist icon** in the left ribbon, or use the command palette → "Kandyban: Open list" — for a tabular layout with inline enum editing.
 
 ## Usage reference
@@ -106,16 +106,17 @@ After installing and enabling Kandyban:
 ### Board view
 
 - **Columns:** one per status value in your configured vocabulary (`open` / `in-progress` / `done` by default). Any extra status values present in your data appear as additional columns at the right so nothing is hidden.
-- **A card's column is its `**Status:**` field — nothing else.** Kandyban reflects what's written in the file; it does not infer progress. If a coding agent (or anyone) starts work on a ticket without writing an in-progress status into its metadata, the card stays in whichever column its `**Status:**` says — it will *not* move on its own. To show it as in-progress, drag the card to that column (which writes the status back to the file), or have the agent set `**Status:**` itself. Note that in project-root layout, external edits to `.sweetclaude/*` files don't reach Obsidian until you run **`Rescan vault and show cache hint`** (see [Vault setup](#vault-setup)).
+- **A card's column is its `**Status:**` field — nothing else.** Kandyban reflects what's written in the file; it does not infer progress. If a coding agent (or anyone) starts work on a ticket without writing an in-progress status into its metadata, the card stays in whichever column its `**Status:**` says — it will *not* move on its own. To show it as in-progress, drag the card to that column (which writes the status back to the file), or have the agent set `**Status:**` itself. Note that in project-root layout, external edits to `.sweetclaude/*` files don't reach Obsidian until you rescan — click the refresh button in the view header or run **`Rescan project`** (see [Vault setup](#vault-setup)).
 - **Cards:** show `id` (monospace), `title`, `milestone` badge (if set), and a `horizon` chip (if set). Within a column, cards are ordered by `horizon` (your configured order, e.g. `now → … → someday`), with no-horizon cards last.
 - **Drag to move:** native HTML5 drag and drop. Drop targets highlight on hover. After drop, the card animates from old to new position; the destination card flashes the accent color for ~900ms so the eye lands at the change.
-- **Click a card** to open the underlying file in a new tab.
+- **Click a card** to open the underlying file in a new tab, or jump to its tab if it's already open. Cmd/Ctrl-click and middle-click follow Obsidian's usual new-tab/split behaviour.
+- **Items with no status** appear in a dashed "no status" column at the end so they never silently disappear.
 - **Scope:** the board surfaces only items with `kind: backlog` (i.e. `I-*` and `BL-*`). Milestone files (`MS-*`) are not rendered as cards — they're link targets.
 
 ### List view
 
 - **Columns:** `id`, `title`, `status`, `horizon`, `milestone`, `scope` (read from the bold-key `**Scope:**` field if present).
-- **Click `id` or `title`** to open the underlying file in a new tab.
+- **Click `id` or `title`** to open the underlying file (same rules as board cards).
 - **Click a `status` or `horizon` cell** to pop an inline picker — choose a new value to write it.
 - **Empty states:** if no items are indexed yet, the table explains how to check your settings. If filters exclude everything, you see "no items match the current filters."
 

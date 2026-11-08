@@ -293,7 +293,7 @@ export default class KansidianPlugin extends Plugin {
 					.getLeavesOfType("markdown")
 					.find((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === tfile.path);
 				if (existing) {
-					workspace.setActiveLeaf(existing, { focus: true });
+					await workspace.revealLeaf(existing);
 					return;
 				}
 			}
