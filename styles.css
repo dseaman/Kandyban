@@ -266,6 +266,12 @@
 	border-color: var(--text-accent);
 }
 
+/* Items with no status value: shown so they don't vanish, but not a drop target. */
+.kansidian-board-column-unset {
+	border-style: dashed;
+	background: transparent;
+}
+
 .kansidian-board-column-head {
 	display: flex;
 	justify-content: space-between;

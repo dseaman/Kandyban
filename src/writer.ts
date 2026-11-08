@@ -14,9 +14,11 @@ export function updateBoldKeyEnum(
 	field: string,
 	newEnum: string,
 ): string {
+	// Case-insensitive key match, mirroring the parser (which lowercases keys),
+	// so a file written as `**status:**` is editable, not just readable.
 	const lineRe = new RegExp(
 		`^(\\*\\*${escapeRegex(field)}:\\*\\*\\s*)(.*)$`,
-		"m",
+		"mi",
 	);
 	const match = content.match(lineRe);
 	if (!match) return content;
@@ -70,7 +72,7 @@ export function updateFrontmatterEnum(
 	// trailing comment to preserve.
 	const lineRe = new RegExp(
 		`^(${escapeRegex(field)}:[ \\t]*)([^\\r\\n#]*?)([ \\t]*#[^\\r\\n]*)?$`,
-		"m",
+		"mi",
 	);
 	const m = fullBlock.match(lineRe);
 	if (!m) return content;

@@ -190,3 +190,22 @@ describe("updateBoldKeyEnum — $-sequence safety", () => {
     expect(out).toBe("# I-001: Title\n**Status:** done ($1.2M budget, $& review)");
   });
 });
+
+describe("writer — key casing matches the parser", () => {
+	it("updates a lowercase bold-key field", () => {
+		const before = "# I-300: Lowercase keys\n\n**status:** open\n**horizon:** now\n";
+		const after = updateBoldKeyEnum(before, "Status", "done");
+		expect(after).toBe("# I-300: Lowercase keys\n\n**status:** done\n**horizon:** now\n");
+	});
+
+	it("updates a capitalised frontmatter key", () => {
+		const before = "---\nid: I-301\nStatus: open\n---\nBody\n";
+		const after = updateFrontmatterEnum(before, "status", "done");
+		expect(after).toBe("---\nid: I-301\nStatus: done\n---\nBody\n");
+	});
+
+	it("still returns content unchanged when the field is absent", () => {
+		const before = "# I-302: No horizon\n\n**Status:** open\n";
+		expect(updateBoldKeyEnum(before, "Horizon", "now")).toBe(before);
+	});
+});

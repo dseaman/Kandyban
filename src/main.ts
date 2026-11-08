@@ -1,8 +1,12 @@
 import {
+	debounce,
+	Keymap,
+	MarkdownView,
 	Notice,
 	Plugin,
 	TFile,
 	type TAbstractFile,
+	type UserEvent,
 	type WorkspaceLeaf,
 } from "obsidian";
 import {
@@ -22,6 +26,8 @@ import {
 } from "./file-access";
 import { KANSIDIAN_BOARD_VIEW_TYPE, KansidianBoardView } from "./views/board-view";
 import { KANSIDIAN_LIST_VIEW_TYPE, KansidianListView } from "./views/list-view";
+
+export type EnumKind = "status" | "horizon";
 
 export type ProjectMode = "flow" | "kanban" | "shape_up" | "agile" | "agile_enterprise" | "unset";
 
@@ -52,23 +58,15 @@ export default class KansidianPlugin extends Plugin {
 	private access!: FileAccess;
 	private hiddenPluginNoticeShown = false;
 
+	// Settings text fields fire onChange per keystroke; wait for a pause in
+	// typing before rescanning so we don't walk the vault once per character.
+	private readonly debouncedRebuild = debounce(() => void this.index.rebuild(), 500, true);
+
 	async onload() {
 		await this.loadSettings();
 
 		// Detect which vault layout we're in before anything else.
-		const detected = await detectMode(this.app.vault);
-		if (detected === "legacy") {
-			this.vaultMode = "legacy";
-			this.access = new VaultAccess(this.app.vault);
-		} else if (detected === "project-root") {
-			this.vaultMode = "project-root";
-			this.access = new ProjectRootAccess(this.app.vault);
-		} else {
-			this.vaultMode = "no-project";
-			// Default to legacy access so list/board can render the empty-state
-			// placeholder without crashing.
-			this.access = new VaultAccess(this.app.vault);
-		}
+		await this.detectVaultLayout();
 
 		this.index = new ItemIndex(this.access, {
 			scanPaths: collectScanPaths(this.settings),
@@ -114,8 +112,8 @@ export default class KansidianPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "rescan-and-hint",
-			name: "Rescan vault and show cache hint",
-			callback: () => void this.rescanAndHint(),
+			name: "Rescan project",
+			callback: () => void this.rescan(),
 		});
 
 		// Vault events. In legacy mode, fires for all tracked files. In
@@ -191,8 +189,28 @@ export default class KansidianPlugin extends Plugin {
 		await this.saveData(this.settings);
 		if (this.index) {
 			this.index.setScanPaths(collectScanPaths(this.settings));
-			void this.index.rebuild();
+			this.debouncedRebuild();
 		}
+	}
+
+	// (Re)detect the vault layout and pick the matching file-access strategy.
+	// Re-run on rescan so a project created after Obsidian started is found
+	// without reloading the plugin.
+	private async detectVaultLayout(): Promise<void> {
+		const detected = await detectMode(this.app.vault);
+		if (detected === "legacy") {
+			this.vaultMode = "legacy";
+			this.access = new VaultAccess(this.app.vault);
+		} else if (detected === "project-root") {
+			this.vaultMode = "project-root";
+			this.access = new ProjectRootAccess(this.app.vault);
+		} else {
+			this.vaultMode = "no-project";
+			// Default to legacy access so list/board can render the empty-state
+			// placeholder without crashing.
+			this.access = new VaultAccess(this.app.vault);
+		}
+		this.index?.setAccess(this.access);
 	}
 
 	async refreshMode(): Promise<void> {
@@ -227,15 +245,18 @@ export default class KansidianPlugin extends Plugin {
 		return { exists: true, mode };
 	}
 
-	private async rescanAndHint(): Promise<void> {
+	// Full refresh: vault layout, project mode, and the item index. Needed in
+	// project-root mode, where edits made outside Obsidian (e.g. by Claude Code)
+	// don't fire vault events.
+	async rescan(): Promise<void> {
+		await this.detectVaultLayout();
+		await this.refreshMode();
 		await this.index.rebuild();
-		const modeNote =
-			this.vaultMode === "project-root"
-				? " (project-root mode reads via vault.adapter — external edits don't fire vault events; rescan after Claude Code sessions if needed.)"
-				: "";
+		const count = this.index.all().filter((i) => i.kind === "backlog").length;
 		new Notice(
-			`Kandyban index rebuilt.${modeNote} If your project uses SweetClaude, its cached session-status.txt does not refresh on Obsidian-driven writes — run /sweetclaude:status in Claude Code (or edit a watched state file) to refresh it.`,
-			10000,
+			this.vaultMode === "no-project"
+				? "Kandyban: no SweetClaude project found in this vault."
+				: `Kandyban: rescanned — ${count} item${count === 1 ? "" : "s"}.`,
 		);
 	}
 
@@ -259,10 +280,24 @@ export default class KansidianPlugin extends Plugin {
 		return this.access.vaultPath(logical);
 	}
 
-	async openLogical(logical: string): Promise<void> {
+	// Opens an item's file. A plain click focuses the file's existing tab if it
+	// is already open, otherwise opens a new tab; Cmd/Ctrl-click, middle-click,
+	// etc. follow Obsidian's usual new-tab/split/window conventions.
+	async openLogical(logical: string, evt?: UserEvent): Promise<void> {
 		const tfile = this.access.getTFile(logical);
 		if (tfile) {
-			await this.app.workspace.getLeaf("tab").openFile(tfile);
+			const { workspace } = this.app;
+			const paneType = Keymap.isModEvent(evt);
+			if (!paneType) {
+				const existing = workspace
+					.getLeavesOfType("markdown")
+					.find((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === tfile.path);
+				if (existing) {
+					workspace.setActiveLeaf(existing, { focus: true });
+					return;
+				}
+			}
+			await workspace.getLeaf(typeof paneType === "string" ? paneType : "tab").openFile(tfile);
 			return;
 		}
 		// Fallback: hand off to the OS for files Obsidian can't open (no TFile
@@ -292,44 +327,54 @@ export default class KansidianPlugin extends Plugin {
 		);
 	}
 
-	private cycleActiveFile(checking: boolean, which: "status" | "horizon"): boolean {
+	private cycleActiveFile(checking: boolean, which: EnumKind): boolean {
 		const file = this.app.workspace.getActiveFile();
 		if (!file || !isMarkdownTAbstractFile(file)) return false;
 		const logical = this.vaultPathToLogical(file.path);
 		if (!logical) return false;
 		const item = this.index.get(logical);
-		if (!item) return false;
-
-		if (which === "status") {
-			if (item.enums.status === undefined) return false;
-			if (checking) return true;
-			const nextEnum = nextInCycle(item.enums.status, this.settings.statusEnums);
-			void this.applyEnumChange(logical, "Status", nextEnum);
-			return true;
-		}
-
-		if (item.enums.horizon === undefined) return false;
+		if (!item || item.enums[which] === undefined) return false;
 		if (checking) return true;
-		const nextEnum = nextInCycle(item.enums.horizon, this.settings.horizonEnums);
-		const fieldName = item.raw["horizon"] !== undefined ? "Horizon" : "Priority";
-		void this.applyEnumChange(logical, fieldName, nextEnum);
+		const vocabulary = which === "status" ? this.settings.statusEnums : this.settings.horizonEnums;
+		void this.applyEnumChange(logical, which, nextInCycle(item.enums[which], vocabulary));
 		return true;
 	}
 
-	async applyEnumChange(logicalPath: string, field: string, newEnum: string): Promise<void> {
-		const content = await this.access.read(logicalPath);
-		const next =
-			detectFormat(content) === "sc4"
-				? updateFrontmatterEnum(content, field.toLowerCase() === "horizon" ? "priority" : field.toLowerCase(), newEnum)
-				: updateBoldKeyEnum(content, field, newEnum);
-		if (next === content) return;
-		await this.access.write(logicalPath, next);
+	// Writes a new status/horizon value back to the item's file. Horizon lives
+	// in `**Horizon:**` or `**Priority:**` (SC3) or `priority:` (SC4). Failures
+	// are surfaced as a notice rather than silently ignored.
+	async applyEnumChange(logicalPath: string, which: EnumKind, newEnum: string): Promise<void> {
+		const item = this.index.get(logicalPath);
+		const name = item?.id ?? logicalPath;
+		let label = which === "status" ? "Status" : "Horizon";
+		try {
+			const content = await this.access.read(logicalPath);
+			let next: string;
+			if (detectFormat(content) === "sc4") {
+				if (which === "horizon") label = "Priority";
+				next = updateFrontmatterEnum(content, label.toLowerCase(), newEnum);
+			} else {
+				if (which === "horizon" && item?.raw["horizon"] === undefined) label = "Priority";
+				next = updateBoldKeyEnum(content, label, newEnum);
+			}
+			if (next === content) {
+				if (item?.enums[which] !== newEnum) {
+					new Notice(`Kandyban: couldn't update ${name} — no ${label} field found in the file.`);
+				}
+				return;
+			}
+			await this.access.write(logicalPath, next);
+		} catch (error) {
+			console.error(`Kandyban: failed to update ${logicalPath}`, error);
+			new Notice(`Kandyban: couldn't update ${name} — ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		}
 		// In project-root mode without a hidden-files plugin, vault events won't
 		// fire — surface the change via the index manually.
 		if (!this.access.usesVaultEvents()) {
 			await this.index.onPathModified(logicalPath);
 		}
-		new Notice(`Kandyban: ${field} → ${newEnum}`);
+		new Notice(`Kandyban: ${label} → ${newEnum}`);
 	}
 
 	private async activateView(viewType: string): Promise<void> {

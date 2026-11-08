@@ -96,3 +96,18 @@ function vocabCompare(a: string, b: string, vocab: string[]): number {
 	if (bi !== -1) return 1;
 	return localeCompare(a, b);
 }
+
+// Distinct, non-empty values for a filter menu, ordered the same way the
+// column sorts: status/horizon in configured-vocabulary order (unknown values
+// after, alphabetically), ids/milestones naturally (MS-2 before MS-10).
+export function sortedOptions(
+	values: Array<string | undefined>,
+	column: SortColumn,
+	vocab: SortVocabulary,
+): string[] {
+	const set = new Set<string>();
+	for (const v of values) {
+		if (typeof v === "string" && v.length > 0) set.add(v);
+	}
+	return Array.from(set).sort((a, b) => compareValues(a, b, column, vocab));
+}

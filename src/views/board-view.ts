@@ -3,7 +3,7 @@ import type KansidianPlugin from "../main";
 import type { ParsedItem } from "../parser";
 import { captureFocus, restoreFocus } from "./preserve-focus";
 import { modeBadge, renderModePlaceholder, shouldShowPlaceholder } from "./mode-placeholder";
-import { compareItems, type SortState } from "./list-sort";
+import { compareItems, sortedOptions, type SortState, type SortVocabulary } from "./list-sort";
 
 // Cards default-sort by horizon within each column: now → … → someday in the
 // configured vocabulary, with missing horizons last (see compareItems).
@@ -29,6 +29,12 @@ const DRAG_MIME = "application/x-kandyban-file-path";
 // gets the "just moved" CSS class. Slightly larger than the flash animation
 // so the highlight survives re-renders triggered by the same change event.
 const JUST_MOVED_WINDOW_MS = 1200;
+
+// Column key for items whose file has no status value. Shown only when such
+// items exist, so they don't silently vanish from the board. Not a drop
+// target — there's no "unset" value to write back.
+const NO_STATUS_COLUMN = "";
+const NO_STATUS_LABEL = "no status";
 
 // FLIP transition duration (ms) for cards animating from old to new position.
 const FLIP_DURATION_MS = 280;
@@ -58,6 +64,7 @@ export class KansidianBoardView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		this.addAction("refresh-cw", "Rescan project", () => void this.plugin.rescan());
 		this.unsubscribe = this.plugin.index.subscribe(() => this.render());
 		this.render();
 	}
@@ -87,7 +94,11 @@ export class KansidianBoardView extends ItemView {
 				return;
 			}
 
-			const entries = this.plugin.index.entries();
+			// Milestones/epics are groupings, not cards — keep them out of the
+			// counts as well as the columns.
+			const entries = this.plugin.index
+				.entries()
+				.filter(([, item]) => item.kind === "backlog");
 			const filtered = this.sortByHorizon(this.applyFilters(entries));
 
 			const header = root.createDiv({ cls: "kansidian-board-header" });
@@ -154,11 +165,15 @@ export class KansidianBoardView extends ItemView {
 	}
 
 	// Stable sort: equal-horizon cards keep their incoming (index) order.
-	private sortByHorizon(entries: Entry[]): Entry[] {
-		const vocab = {
+	private vocab(): SortVocabulary {
+		return {
 			status: this.plugin.settings.statusEnums,
 			horizon: this.plugin.settings.horizonEnums,
 		};
+	}
+
+	private sortByHorizon(entries: Entry[]): Entry[] {
+		const vocab = this.vocab();
 		return [...entries].sort(([, a], [, b]) => compareItems(a, b, HORIZON_SORT, vocab));
 	}
 
@@ -166,7 +181,6 @@ export class KansidianBoardView extends ItemView {
 		const { search, horizon, milestone } = this.filters;
 		const needle = search.trim().toLowerCase();
 		return entries.filter(([, item]) => {
-			if (item.kind !== "backlog") return false; // board surfaces backlog items only
 			if (horizon && item.enums.horizon !== horizon) return false;
 			if (milestone && item.enums.milestone !== milestone) return false;
 			if (needle) {
@@ -180,14 +194,17 @@ export class KansidianBoardView extends ItemView {
 	private deriveColumns(items: ParsedItem[]): string[] {
 		const configured = this.plugin.settings.statusEnums;
 		const inData = new Set<string>();
+		let hasUnset = false;
 		for (const i of items) {
 			if (i.enums.status) inData.add(i.enums.status);
+			else hasUnset = true;
 		}
 		const result: string[] = [...configured];
 		for (const s of configured) inData.delete(s);
 		for (const extra of Array.from(inData).sort()) {
 			result.push(extra);
 		}
+		if (hasUnset) result.push(NO_STATUS_COLUMN);
 		return result;
 	}
 
@@ -223,8 +240,9 @@ export class KansidianBoardView extends ItemView {
 		});
 
 		const items = entries.map(([, item]) => item);
-		const uniqueHorizons = sortedUnique(items.map((i) => i.enums.horizon));
-		const uniqueMilestones = sortedUnique(items.map((i) => i.enums.milestone));
+		const vocab = this.vocab();
+		const uniqueHorizons = sortedOptions(items.map((i) => i.enums.horizon), "horizon", vocab);
+		const uniqueMilestones = sortedOptions(items.map((i) => i.enums.milestone), "milestone", vocab);
 		this.renderFilterSelect(toolbar, "horizon", uniqueHorizons, this.filters.horizon, (v) => {
 			this.filters.horizon = v;
 		});
@@ -257,25 +275,33 @@ export class KansidianBoardView extends ItemView {
 		const inColumn = entries.filter(([, i]) => (i.enums.status ?? "") === status);
 
 		const head = column.createDiv({ cls: "kansidian-board-column-head" });
-		head.createEl("span", { text: status, cls: "kansidian-board-column-name" });
+		const isUnset = status === NO_STATUS_COLUMN;
+		head.createEl("span", { text: isUnset ? NO_STATUS_LABEL : status, cls: "kansidian-board-column-name" });
 		head.createEl("span", { text: String(inColumn.length), cls: "kansidian-board-column-count" });
 
 		column.dataset["status"] = status;
 
-		column.addEventListener("dragover", (event) => {
-			event.preventDefault();
-			column.addClass("kansidian-board-column-dropping");
-		});
-		column.addEventListener("dragleave", () => {
-			column.removeClass("kansidian-board-column-dropping");
-		});
-		column.addEventListener("drop", (event) => {
-			event.preventDefault();
-			column.removeClass("kansidian-board-column-dropping");
-			const filePath = event.dataTransfer?.getData(DRAG_MIME);
-			if (!filePath) return;
-			this.moveFileToStatus(filePath, status);
-		});
+		if (isUnset) {
+			column.addClass("kansidian-board-column-unset");
+		} else {
+			column.addEventListener("dragover", (event) => {
+				// Only advertise a drop target for Kandyban cards, not e.g. files
+				// dragged in from the OS.
+				if (!event.dataTransfer?.types.includes(DRAG_MIME)) return;
+				event.preventDefault();
+				column.addClass("kansidian-board-column-dropping");
+			});
+			column.addEventListener("dragleave", () => {
+				column.removeClass("kansidian-board-column-dropping");
+			});
+			column.addEventListener("drop", (event) => {
+				event.preventDefault();
+				column.removeClass("kansidian-board-column-dropping");
+				const filePath = event.dataTransfer?.getData(DRAG_MIME);
+				if (!filePath) return;
+				this.moveFileToStatus(filePath, status);
+			});
+		}
 
 		const list = column.createDiv({ cls: "kansidian-board-cards" });
 		for (const [logicalPath, item] of inColumn) {
@@ -326,8 +352,14 @@ export class KansidianBoardView extends ItemView {
 		card.addEventListener("dragend", () => {
 			card.removeClass("kansidian-board-card-dragging");
 		});
-		card.addEventListener("click", () => {
-			void this.plugin.openLogical(logicalPath);
+		card.addEventListener("click", (event) => {
+			void this.plugin.openLogical(logicalPath, event);
+		});
+		// Middle-click opens in a new tab, as elsewhere in Obsidian.
+		card.addEventListener("auxclick", (event) => {
+			if (event.button !== 1) return;
+			event.preventDefault();
+			void this.plugin.openLogical(logicalPath, event);
 		});
 	}
 
@@ -339,14 +371,6 @@ export class KansidianBoardView extends ItemView {
 		// kicks off the index → render cycle.
 		this.recentlyMovedPath = logicalPath;
 		this.recentlyMovedAt = Date.now();
-		void this.plugin.applyEnumChange(logicalPath, "Status", targetStatus);
+		void this.plugin.applyEnumChange(logicalPath, "status", targetStatus);
 	}
-}
-
-function sortedUnique(values: Array<string | undefined>): string[] {
-	const set = new Set<string>();
-	for (const v of values) {
-		if (typeof v === "string" && v.length > 0) set.add(v);
-	}
-	return Array.from(set).sort();
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
 	compareItems,
+	sortedOptions,
 	type SortState,
 	type SortVocabulary,
 } from "../src/views/list-sort";
@@ -175,6 +176,30 @@ describe("compareItems — scope column", () => {
 			"C",
 			"A",
 			"B",
+		]);
+	});
+});
+
+describe("sortedOptions", () => {
+	it("orders horizons by the configured vocabulary, unknowns after", () => {
+		expect(
+			sortedOptions(["later", "now", "zebra", undefined, "next", "now", "", "alpha"], "horizon", vocab),
+		).toEqual(["now", "next", "later", "alpha", "zebra"]);
+	});
+
+	it("orders statuses by the configured vocabulary", () => {
+		expect(sortedOptions(["done", "open", "in-progress"], "status", vocab)).toEqual([
+			"open",
+			"in-progress",
+			"done",
+		]);
+	});
+
+	it("orders milestones naturally", () => {
+		expect(sortedOptions(["MS-10", "MS-2", "MS-1"], "milestone", vocab)).toEqual([
+			"MS-1",
+			"MS-2",
+			"MS-10",
 		]);
 	});
 });
